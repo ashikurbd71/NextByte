@@ -11,6 +11,12 @@ export class CreateCourseDto {
     @IsString()
     @IsNotEmpty()
     @MaxLength(255)
+    description: string;
+
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(255)
     slugName: string;
 
     @IsString()
@@ -92,5 +98,5 @@ export class CreateCourseDto {
     @IsNumber()
     @IsPositive()
     @Type(() => Number)
-    instructorId: number;
+    instructorIds: number[];
 }

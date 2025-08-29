@@ -88,8 +88,13 @@ export class Course {
     @ManyToOne(() => Category, category => category.courses)
     category: Category;
 
-    @ManyToOne(() => Admin)
-    instructor: Admin;
+    @ManyToMany(() => Admin)
+    @JoinTable({
+        name: 'course_instructors',
+        joinColumn: { name: 'courseId', referencedColumnName: 'id' },
+        inverseJoinColumn: { name: 'adminId', referencedColumnName: 'id' }
+    })
+    instructors: Admin[];
 
     @ManyToMany(() => User)
     @JoinTable({

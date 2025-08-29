@@ -71,7 +71,7 @@ export class EnrollmentService {
     // Load the enrollment with course and instructor details for email
     const enrollmentWithDetails = await this.enrollmentRepository.findOne({
       where: { id: savedEnrollment.id },
-      relations: ['student', 'course', 'course.instructor', 'course.modules', 'course.modules.assignments', 'course.modules.lessons']
+      relations: ['student', 'course', 'course.instructors', 'course.modules', 'course.modules.assignments', 'course.modules.lessons']
     });
 
     if (!enrollmentWithDetails) {
@@ -91,7 +91,7 @@ export class EnrollmentService {
         enrollmentWithDetails.student.email,
         enrollmentWithDetails.student.name,
         enrollmentWithDetails.course.name,
-        enrollmentWithDetails.course.instructor.name,
+        enrollmentWithDetails.course.instructors[0]?.name || 'Course Instructor',
         enrollmentWithDetails.course.facebookGroupLink || '',
         enrollmentWithDetails.course.duration,
         enrollmentWithDetails.amountPaid
@@ -227,7 +227,7 @@ export class EnrollmentService {
   async handleSslCommerzSuccess(transactionData: any): Promise<Enrollment> {
     const enrollment = await this.enrollmentRepository.findOne({
       where: { transactionId: transactionData.tran_id },
-      relations: ['student', 'course', 'course.instructor']
+      relations: ['student', 'course', 'course.instructors']
     });
 
     if (!enrollment) {
@@ -252,7 +252,7 @@ export class EnrollmentService {
     // Reload enrollment with updated data
     const updatedEnrollment = await this.enrollmentRepository.findOne({
       where: { id: enrollment.id },
-      relations: ['student', 'course', 'course.instructor']
+      relations: ['student', 'course', 'course.instructors']
     });
 
     if (!updatedEnrollment) {
@@ -271,7 +271,7 @@ export class EnrollmentService {
         updatedEnrollment.student.email,
         updatedEnrollment.student.name,
         updatedEnrollment.course.name,
-        updatedEnrollment.course.instructor.name,
+        updatedEnrollment.course.instructors[0]?.name || 'Course Instructor',
         updatedEnrollment.course.facebookGroupLink || '',
         updatedEnrollment.course.duration,
         updatedEnrollment.amountPaid
@@ -342,7 +342,7 @@ export class EnrollmentService {
 
   async findAll(): Promise<Enrollment[]> {
     return await this.enrollmentRepository.find({
-      relations: ['student', 'course', 'course.instructor', 'course.modules', 'course.modules.assignments', 'course.modules.lessons'],
+      relations: ['student', 'course', 'course.instructors', 'course.modules', 'course.modules.assignments', 'course.modules.lessons'],
       order: { createdAt: 'DESC' }
     });
   }
@@ -350,7 +350,7 @@ export class EnrollmentService {
   async findOne(id: number): Promise<Enrollment> {
     const enrollment = await this.enrollmentRepository.findOne({
       where: { id },
-      relations: ['student', 'course', 'course.instructor', 'course.modules', 'course.modules.assignments', 'course.modules.lessons']
+      relations: ['student', 'course', 'course.instructors', 'course.modules', 'course.modules.assignments', 'course.modules.lessons']
     });
 
     if (!enrollment) {
@@ -363,7 +363,7 @@ export class EnrollmentService {
   async findByStudent(studentId: number): Promise<Enrollment[]> {
     return await this.enrollmentRepository.find({
       where: { student: { id: studentId } },
-      relations: ['course', 'course.instructor', 'course.modules', 'course.modules.assignments', 'course.modules.lessons'],
+      relations: ['course', 'course.instructors', 'course.modules', 'course.modules.assignments', 'course.modules.lessons'],
       order: { createdAt: 'DESC' }
     });
   }
@@ -371,7 +371,7 @@ export class EnrollmentService {
   async findByCourse(courseId: number): Promise<Enrollment[]> {
     return await this.enrollmentRepository.find({
       where: { course: { id: courseId } },
-      relations: ['student', 'course.instructor', 'course.modules', 'course.modules.assignments', 'course.modules.lessons'],
+      relations: ['student', 'course.instructors', 'course.modules', 'course.modules.assignments', 'course.modules.lessons'],
       order: { createdAt: 'DESC' }
     });
   }

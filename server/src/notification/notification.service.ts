@@ -6,6 +6,8 @@ import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { EmailService } from '../admin/email.service';
 import { User } from '../users/entities/user.entity';
+import { Enrollment, EnrollmentStatus } from '../enrollment/entities/enrollment.entity';
+import { Course } from '../course/entities/course.entity';
 
 @Injectable()
 export class NotificationService {
@@ -14,6 +16,10 @@ export class NotificationService {
     private notificationRepository: Repository<Notification>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(Enrollment)
+    private enrollmentRepository: Repository<Enrollment>,
+    @InjectRepository(Course)
+    private courseRepository: Repository<Course>,
     private emailService: EmailService,
   ) { }
 
@@ -348,6 +354,277 @@ export class NotificationService {
     return savedNotification;
   }
 
+  // New method to send notification to all users
+  async createNotificationForAllUsers(
+    title: string,
+    message: string,
+    metadata?: any
+  ): Promise<{ success: boolean; totalUsers: number; emailsSent: number; errors: string[] }> {
+    try {
+      // Get all active users
+      const allUsers = await this.userRepository.find({
+        where: { isActive: true },
+        select: ['id', 'email', 'name']
+      });
+
+      if (allUsers.length === 0) {
+        return {
+          success: false,
+          totalUsers: 0,
+          emailsSent: 0,
+          errors: ['No active users found']
+        };
+      }
+
+      const errors: string[] = [];
+      let emailsSent = 0;
+
+      // Create notifications and send emails for each user
+      for (const user of allUsers) {
+        try {
+          const notification = this.notificationRepository.create({
+            title,
+            message,
+            type: NotificationType.GENERAL,
+            recipient: user,
+            metadata
+          });
+
+          const savedNotification = await this.notificationRepository.save(notification);
+
+          // Send email notification
+          await this.sendNotificationEmail(savedNotification);
+          emailsSent++;
+        } catch (error) {
+          const errorMsg = `Failed to send notification to user ${user.id} (${user.email}): ${error.message}`;
+          errors.push(errorMsg);
+          console.error(errorMsg);
+        }
+      }
+
+      return {
+        success: emailsSent > 0,
+        totalUsers: allUsers.length,
+        emailsSent,
+        errors
+      };
+    } catch (error) {
+      console.error('Failed to create notifications for all users:', error);
+      return {
+        success: false,
+        totalUsers: 0,
+        emailsSent: 0,
+        errors: [error.message]
+      };
+    }
+  }
+
+  // New method to send notification to all students enrolled in a specific course
+  async sendNotificationsToCourseStudents(
+    courseId: number,
+    title: string,
+    message: string,
+    metadata?: any
+  ): Promise<{ success: boolean; totalStudents: number; emailsSent: number; errors: string[] }> {
+    try {
+      // Validate required fields
+      if (!title || !message) {
+        return {
+          success: false,
+          totalStudents: 0,
+          emailsSent: 0,
+          errors: ['Title and message are required']
+        };
+      }
+
+      // First verify the course exists
+      const course = await this.courseRepository.findOne({ where: { id: courseId } });
+      if (!course) {
+        return {
+          success: false,
+          totalStudents: 0,
+          emailsSent: 0,
+          errors: ['Course not found']
+        };
+      }
+
+      // Get all active students enrolled in the course
+      const enrollments = await this.enrollmentRepository.find({
+        where: {
+          course: { id: courseId },
+          status: EnrollmentStatus.ACTIVE // Only active enrollments
+        },
+        relations: ['student']
+      });
+
+      if (enrollments.length === 0) {
+        return {
+          success: false,
+          totalStudents: 0,
+          emailsSent: 0,
+          errors: ['No active students enrolled in this course']
+        };
+      }
+
+      const errors: string[] = [];
+      let emailsSent = 0;
+
+      // Create notifications and send emails for each student
+      for (const enrollment of enrollments) {
+        const student = enrollment.student;
+        if (!student) {
+          const errorMsg = `Student not found for enrollment ID: ${enrollment.id}`;
+          errors.push(errorMsg);
+          console.error(errorMsg);
+          continue;
+        }
+
+        try {
+          // Ensure message is not null or empty
+          const notificationMessage = message || 'No message provided';
+
+          const notification = this.notificationRepository.create({
+            title: title || 'Course Notification',
+            message: notificationMessage,
+            type: NotificationType.GENERAL,
+            recipient: student,
+            metadata: {
+              ...metadata,
+              courseId,
+              courseName: course.name,
+              enrollmentId: enrollment.id
+            }
+          });
+
+          const savedNotification = await this.notificationRepository.save(notification);
+
+          // Send email notification
+          await this.sendNotificationEmail(savedNotification);
+          emailsSent++;
+        } catch (error) {
+          const errorMsg = `Failed to send notification to student ${student.id} (${student.email}): ${error.message}`;
+          errors.push(errorMsg);
+          console.error(errorMsg);
+        }
+      }
+
+      return {
+        success: emailsSent > 0,
+        totalStudents: enrollments.length,
+        emailsSent,
+        errors
+      };
+    } catch (error) {
+      console.error('Failed to send notifications to course students:', error);
+      return {
+        success: false,
+        totalStudents: 0,
+        emailsSent: 0,
+        errors: [error.message]
+      };
+    }
+  }
+
+  // New method to send notification to a specific student in a course
+  async sendNotificationToCourseStudent(
+    courseId: number,
+    studentId: number,
+    title: string,
+    message: string,
+    metadata?: any
+  ): Promise<{ success: boolean; emailSent: boolean; error?: string }> {
+    try {
+      // Validate required fields
+      if (!title || !message) {
+        return {
+          success: false,
+          emailSent: false,
+          error: 'Title and message are required'
+        };
+      }
+
+      // First verify the course exists
+      const course = await this.courseRepository.findOne({ where: { id: courseId } });
+      if (!course) {
+        return {
+          success: false,
+          emailSent: false,
+          error: 'Course not found'
+        };
+      }
+
+      // Verify the student exists and is enrolled in the course
+      const enrollment = await this.enrollmentRepository.findOne({
+        where: {
+          course: { id: courseId },
+          student: { id: studentId },
+          status: EnrollmentStatus.ACTIVE
+        },
+        relations: ['student']
+      });
+
+      if (!enrollment) {
+        return {
+          success: false,
+          emailSent: false,
+          error: 'Student not enrolled in this course or enrollment is not active'
+        };
+      }
+
+      const student = enrollment.student;
+      if (!student) {
+        return {
+          success: false,
+          emailSent: false,
+          error: 'Student not found'
+        };
+      }
+
+      try {
+        // Ensure message is not null or empty
+        const notificationMessage = message || 'No message provided';
+
+        const notification = this.notificationRepository.create({
+          title: title || 'Course Notification',
+          message: notificationMessage,
+          type: NotificationType.GENERAL,
+          recipient: student,
+          metadata: {
+            ...metadata,
+            courseId,
+            courseName: course.name,
+            enrollmentId: enrollment.id
+          }
+        });
+
+        const savedNotification = await this.notificationRepository.save(notification);
+
+        // Send email notification
+        await this.sendNotificationEmail(savedNotification);
+
+        return {
+          success: true,
+          emailSent: true
+        };
+      } catch (error) {
+        const errorMsg = `Failed to send notification to student ${student.id} (${student.email}): ${error.message}`;
+        console.error(errorMsg);
+        return {
+          success: false,
+          emailSent: false,
+          error: errorMsg
+        };
+      }
+    } catch (error) {
+      console.error('Failed to send notification to course student:', error);
+      return {
+        success: false,
+        emailSent: false,
+        error: error.message
+      };
+    }
+  }
+
   private async sendNotificationEmail(notification: Notification): Promise<void> {
     try {
       // Ensure the recipient relation is loaded
@@ -379,10 +656,23 @@ export class NotificationService {
   }
 
   private generateEmailHTML(notification: Notification): string {
+    let additionalContent = '';
+
+    // Add description if available
+    if (notification.metadata?.description) {
+      additionalContent += `<p style="color: #555; line-height: 1.6; margin: 15px 0;"><strong>Description:</strong> ${notification.metadata.description}</p>`;
+    }
+
+    // Add link if available
+    if (notification.metadata?.link) {
+      additionalContent += `<p style="color: #555; line-height: 1.6; margin: 15px 0;"><strong>Link:</strong> <a href="${notification.metadata.link}" style="color: #007bff;">${notification.metadata.link}</a></p>`;
+    }
+
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #333;">${notification.title}</h2>
         <p style="color: #666; line-height: 1.6;">${notification.message}</p>
+        ${additionalContent}
         <hr style="border: 1px solid #eee; margin: 20px 0;">
         <p style="color: #999; font-size: 12px;">
           This is an automated notification from NextByte Learning Platform.
@@ -393,6 +683,28 @@ export class NotificationService {
 
   private getEmailActionButton(notification: Notification): string {
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+    // Check if it's a course notification with a specific link
+    if (notification.metadata?.link) {
+      return `
+        <div style="text-align: center; margin: 20px 0;">
+          <a href="${notification.metadata.link}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            View Details
+          </a>
+        </div>
+      `;
+    }
+
+    // Check if it's a course notification
+    if (notification.metadata?.courseId) {
+      return `
+        <div style="text-align: center; margin: 20px 0;">
+          <a href="${baseUrl}/courses/${notification.metadata.courseId}" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            Go to Course
+          </a>
+        </div>
+      `;
+    }
 
     switch (notification.type) {
       case NotificationType.ASSIGNMENT_FEEDBACK:

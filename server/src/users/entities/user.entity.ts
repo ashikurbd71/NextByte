@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from 'typeorm';
 
 @Entity('users')
 export class User {
@@ -55,6 +55,12 @@ export class User {
 
     @Column({ type: 'timestamp', nullable: true })
     otpExpiry: Date | null;
+
+    @Column({ default: false })
+    isDeleted: boolean;
+
+    @Column({ type: 'timestamp', nullable: true })
+    deletedAt: Date | null;
 
     @CreateDateColumn()
     createdAt: Date;

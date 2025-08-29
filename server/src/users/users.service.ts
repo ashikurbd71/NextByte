@@ -46,6 +46,7 @@ export class UsersService {
 
   async findAll(): Promise<User[]> {
     return await this.userRepository.find({
+      where: { isDeleted: false },
       order: { createdAt: 'DESC' }
     });
   }
@@ -66,7 +67,7 @@ export class UsersService {
 
   async findOne(id: number): Promise<User> {
     const user = await this.userRepository.findOne({
-      where: { id }
+      where: { id, isDeleted: false }
     });
 
     if (!user) {
@@ -78,7 +79,7 @@ export class UsersService {
 
   async findByPhone(phone: string): Promise<User> {
     const user = await this.userRepository.findOne({
-      where: { phone }
+      where: { phone, isDeleted: false }
     });
 
     if (!user) {
@@ -90,7 +91,7 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User> {
     const user = await this.userRepository.findOne({
-      where: { email }
+      where: { email, isDeleted: false }
     });
 
     if (!user) {
@@ -102,7 +103,7 @@ export class UsersService {
 
   async findByStudentId(studentId: string): Promise<User> {
     const user = await this.userRepository.findOne({
-      where: { studentId }
+      where: { studentId, isDeleted: false }
     });
 
     if (!user) {
@@ -150,7 +151,13 @@ export class UsersService {
 
   async remove(id: number): Promise<void> {
     const user = await this.findOne(id);
-    await this.userRepository.remove(user);
+
+    // Soft delete - mark as deleted instead of actually deleting
+    user.isDeleted = true;
+    user.deletedAt = new Date();
+    user.isActive = false;
+
+    await this.userRepository.save(user);
   }
 
   async banUser(id: number, banUserDto: BanUserDto): Promise<User> {
@@ -226,16 +233,18 @@ export class UsersService {
     banned: number;
     verified: number;
     unverified: number;
+    deleted: number;
   }> {
-    const [total, active, banned, verified, unverified] = await Promise.all([
-      this.userRepository.count(),
-      this.userRepository.count({ where: { isActive: true, isBanned: false } }),
-      this.userRepository.count({ where: { isBanned: true } }),
-      this.userRepository.count({ where: { isVerified: true } }),
-      this.userRepository.count({ where: { isVerified: false } }),
+    const [total, active, banned, verified, unverified, deleted] = await Promise.all([
+      this.userRepository.count({ where: { isDeleted: false } }),
+      this.userRepository.count({ where: { isActive: true, isBanned: false, isDeleted: false } }),
+      this.userRepository.count({ where: { isBanned: true, isDeleted: false } }),
+      this.userRepository.count({ where: { isVerified: true, isDeleted: false } }),
+      this.userRepository.count({ where: { isVerified: false, isDeleted: false } }),
+      this.userRepository.count({ where: { isDeleted: true } }),
     ]);
 
-    return { total, active, banned, verified, unverified };
+    return { total, active, banned, verified, unverified, deleted };
   }
 
   private async generateStudentId(): Promise<string> {

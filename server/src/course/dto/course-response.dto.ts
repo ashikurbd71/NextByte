@@ -9,6 +9,9 @@ export class CourseResponseDto {
     name: string;
 
     @ApiProperty()
+    description: string;
+
+    @ApiProperty()
     slugName: string;
 
     @ApiProperty()

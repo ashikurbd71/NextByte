@@ -14,6 +14,12 @@ export class UpdateCourseDto {
     @IsString()
     @IsNotEmpty()
     @MaxLength(255)
+    description?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(255)
     slugName?: string;
 
     @IsOptional()
@@ -89,10 +95,11 @@ export class UpdateCourseDto {
     categoryId?: number;
 
     @IsOptional()
-    @IsNumber()
-    @IsPositive()
+    @IsArray()
+    @IsNumber({}, { each: true })
+    @IsPositive({ each: true })
     @Type(() => Number)
-    instructorId?: number;
+    instructorIds?: number[];
 
     @IsOptional()
     @IsBoolean()
